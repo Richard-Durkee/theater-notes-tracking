@@ -1,0 +1,138 @@
+function getPerformers()
+{
+  const ss = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet()
+  let performers = ss.getRange(1,18,1,16,).getValues()[0]
+  performers.map( performer => performer.toString().trim().toLowerCase())
+  return performers
+}
+
+function getPerformerRequirements() 
+{
+  const ss = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet()
+  const endRow = ss.getLastRow()
+
+    // An object representing a dictionary from a Performer to a list of their requiered words, initially disjoint of those shared by all
+  let performerReqs = {}
+
+  // An Array consisting of all the words shared by every Performer
+  let allReqs = []
+
+  // A list of all the performers
+  let performers = getPerformers()
+  // Add each performer to the performerReqs Object with an empty array
+  performers.forEach( performer => 
+    performerReqs[performer.toString().trim().toLowerCase()] = []
+  )
+
+  for(let i = 3; i <= endRow; i++){
+    // Get the name of the Performer on the current row and clean up the String
+    let currPerformer = ss.getRange(i,1).getValue().toString().trim().toLowerCase()
+
+    // Get the list of words for that Performer
+    let currWord = ss.getRange(i, 16).getValue().toString().trim().toLowerCase()
+
+    // If the currPerformer is "all", add the word to the allReqs array
+    if(currPerformer === "all")
+    {
+      allReqs.push(currWord)
+    }
+
+    // Exclude lines that do not have Performers
+    if (!currPerformer || !performers.includes(currPerformer) || currPerformer === "")
+    {
+      continue;
+    }
+
+    // Add the new word to the current Performer's word list
+    performerReqs[currPerformer].push(currWord)
+  }
+  
+  // For every word that everyone shares, add it to every Performer's individual requirement list
+  allReqs.forEach(
+    req => Object.keys(performerReqs).forEach( performer =>
+      performerReqs[performer].push(req)
+    )
+  )
+
+  return performerReqs
+}
+
+function getPerformerResponses(column)
+{
+  const ss = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet()
+  const endRow = ss.getLastRow()
+  let performerResponses = ss.getRange(2,column,endRow).getValues().map( resp => resp.toString().trim().toLowerCase())
+  return performerResponses.filter( resp => resp && resp !== "")
+}
+
+function onEditIsReq(performer, response) {
+  const reqs = getPerformerRequirements()
+  return reqs && reqs[performer].includes(response.toString().trim().toLowerCase())
+}
+
+function onEditAllReqsSatisfied(performer, column) {
+  let performerReqs = getPerformerRequirements()
+  let reqs = performerReqs[performer.toString().trim().toLowerCase()]
+  let resps = getPerformerResponses(column)
+
+  let allReqsSatisfied = true
+  let allRespsValid = true
+
+  resps.forEach(resp =>
+    { 
+      let i = reqs.indexOf(resp)
+      if (i !== -1)
+      {
+        reqs.splice(i,1)
+      } 
+      else
+      {
+        allRespsValid = false
+      }
+    }
+  )
+
+  if (reqs && reqs.length != 0)
+  {
+    allReqsSatisfied = false
+  }
+ 
+  return allReqsSatisfied && allRespsValid
+}
+
+/*
+
+  @Input e - an Event Object of the cell that was edited
+*/
+function performerCellChange(e)
+{  
+  const ss = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet()
+  let range = e.range
+  let column = range.getColumn()
+  if (column >= 18 && column <= 34) {
+    let response = e.value
+    let row = range.getRow()
+    
+    if (response && response.toString() !== "" && row > 1 && onEditIsReq(ss.getRange(1, column).getValue(), response.toString()))
+    {
+      ss.getRange(row, column).setFontColor('#6aa84f')
+    }
+    else
+    {
+      ss.getRange(row, column).setFontColor('#e06666')
+    }
+
+    if (onEditAllReqsSatisfied(ss.getRange(1, column).getValue(), column))
+    {
+      ss.getRange(1, column).setBackground('#93c47d')
+      ss.getRange(1, column).setFontColor('#000000')
+    }
+    else
+    {
+      ss.getRange(1, column).setBackground('#e06666')
+      ss.getRange(1, column).setFontColor('#000000')
+    }
+  }
+
+  return
+}
